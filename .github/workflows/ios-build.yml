@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -17,6 +17,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Show Xcode version
+        run: xcodebuild -version
       - name: Install JS dependencies
         run: npm ci
       - name: Generate native iOS project
@@ -29,7 +31,9 @@ jobs:
           echo "SCHEME=$SCHEME" >> "$GITHUB_ENV"
           xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" \
             -destination 'generic/platform=iOS' -configuration Release \
-            -derivedDataPath ios/build CODE_SIGNING_ALLOWED=NO build | tail -200
+            -derivedDataPath ios/build CODE_SIGNING_ALLOWED=NO build > xcodebuild.log 2>&1 \
+            || { grep -nE "error:|fatal|BUILD FAILED" xcodebuild.log | head -50; tail -80 xcodebuild.log; exit 1; }
+          tail -20 xcodebuild.log
       - name: Package unsigned IPA
         run: |
           mkdir -p Payload
@@ -40,3 +44,9 @@ jobs:
           name: ride-log-unsigned-ipa
           path: ride-log-unsigned.ipa
           retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: xcodebuild-log
+          path: xcodebuild.log
+          retention-days: 7
