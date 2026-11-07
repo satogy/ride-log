@@ -34,23 +34,16 @@ APIキーはリポジトリにコミットしない（`.env*.local` に置く。
 
 ## Step 1 を iPhone で試す
 
-バックグラウンドの位置記録は Expo Go では動かないため、**開発ビルド**をEASで作る（WindowsなのでXcode不要のクラウドビルド）。
+バックグラウンドの位置記録は Expo Go では動かない。有料のApple Developerアカウントがない間は、JumpCamと同じく **GitHub上のMacで署名なしIPAを作り、Sideloadlyで自分のApple ID（無料）で署名して入れる**。
 
-```bash
-npm install
-npx eas-cli@latest login
-npx eas-cli@latest init
-npx eas-cli@latest device:create      # iPhoneを登録（表示されるQRをiPhoneで開く）
-npx eas-cli@latest build --profile development --platform ios
-```
+1. GitHubの [Actions → iOS build (unsigned IPA)](https://github.com/satogy/ride-log/actions/workflows/ios-build.yml) で「Run workflow」（手動実行のみ。macOSは無料枠の消費が大きいため）
+2. 完了したら成果物 `ride-log-unsigned-ipa` をダウンロードして解凍し、`ride-log-unsigned.ipa` を取り出す
+3. iPhoneをPCにつなぎ、Sideloadlyに `.ipa` をドラッグ、Apple IDを入れて Start
+4. iPhoneの「設定 → 一般 → VPNとデバイス管理」で自分のApple IDを信頼、「プライバシーとセキュリティ → デベロッパモード」をオン
 
-ビルド完了後、表示されるQR/リンクからiPhoneにインストール。iPhoneの「設定 → プライバシーとセキュリティ → デベロッパモード」をオンにする必要がある。
+Releaseビルドなので開発サーバーは不要。無料のApple IDでは **7日で期限切れ**になるので、その都度Sideloadlyで入れ直す（データは上書きインストールなら残る）。
 
-その後、PCで開発サーバーを起動し、iPhoneの開発ビルドから接続する。
-
-```bash
-npx expo start
-```
+SPIRAQの法人アカウントが使えるようになったら、EASの開発ビルド（`eas.json` の `development`）に切り替える。
 
 ### 完了条件の確かめ方
 
