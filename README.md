@@ -18,7 +18,7 @@
 1. [Google Cloud Console](https://console.cloud.google.com/) でプロジェクト `ride-log` を作る（Firebaseと同じプロジェクトにすると管理が楽）
 2. 「APIとサービス」→「ライブラリ」で **Maps SDK for iOS** と **Roads API** を有効化
 3. 「認証情報」でAPIキーを2つ作る
-   - **アプリ用**：アプリケーションの制限＝iOSアプリ、バンドルID `jp.spiraq.ridelog`。APIの制限＝Maps SDK for iOS のみ
+   - **アプリ用**：アプリケーションの制限＝iOSアプリ、バンドルID `jp.spiraq.ridelog.dev`（開発用。正式版はSPIRAQアカウントで `jp.spiraq.ridelog`）。APIの制限＝Maps SDK for iOS のみ
    - **サーバー用**：APIの制限＝Roads API のみ。アプリには埋め込まない（Cloud Functionsのシークレットに置く）
 4. 「お支払い」→「予算とアラート」で予算アラートを設定（例：月500円）
 5. 「割り当て」で Roads API の1日あたりリクエスト上限を設定（例：200件/日）
