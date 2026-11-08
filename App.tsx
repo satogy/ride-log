@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, AppState, FlatList, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { getActiveRide, listRides, RideSummary } from './src/db';
 import { ensurePermissions, resumeIfRecording, startRide, stopRide } from './src/recording';
+import RideMap from './src/RideMap';
 
 // Step 1：記録だけ。ホーム（出発）と走行中（経過時間・終了）の2画面。
 // 走行中も地図は描かない。点の数はアプリを開いている間だけ確認用に表示する。
@@ -25,6 +26,7 @@ export default function App() {
   const [rides, setRides] = useState<RideSummary[]>([]);
   const [now, setNow] = useState(Date.now());
   const [busy, setBusy] = useState(false);
+  const [openRide, setOpenRide] = useState<RideSummary | null>(null);
 
   const refresh = useCallback(async () => {
     const active = await getActiveRide();
@@ -84,6 +86,15 @@ export default function App() {
   const current = rides.find((r) => r.status === 'recording');
   const past = rides.filter((r) => r.status !== 'recording');
 
+  if (openRide && activeStartedAt == null) {
+    return (
+      <>
+        <StatusBar style="dark" />
+        <RideMap rideId={openRide.id} title={formatDate(openRide.startedAt)} onClose={() => setOpenRide(null)} />
+      </>
+    );
+  }
+
   if (activeStartedAt != null) {
     return (
       <SafeAreaView style={[styles.container, styles.dark]}>
@@ -124,12 +135,15 @@ export default function App() {
         keyExtractor={(r) => String(r.id)}
         ListEmptyComponent={<Text style={styles.empty}>まだ記録がありません</Text>}
         renderItem={({ item }) => (
-          <View style={styles.row}>
+          <Pressable
+            onPress={() => setOpenRide(item)}
+            style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+          >
             <Text style={styles.rowTitle}>{formatDate(item.startedAt)}</Text>
             <Text style={styles.rowSub}>
-              {item.endedAt ? formatDuration(item.endedAt - item.startedAt) : '-'}・{item.pointCount}点
+              {item.endedAt ? formatDuration(item.endedAt - item.startedAt) : '-'}・{item.pointCount}点 ›
             </Text>
-          </View>
+          </Pressable>
         )}
       />
     </SafeAreaView>

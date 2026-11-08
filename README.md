@@ -10,6 +10,7 @@
 | 準備：Google Cloud（Maps SDK for iOS、Roads API、APIキー2つ） | 未（下の手順で手作業） |
 | 準備：Firebaseプロジェクト | 未（下の手順で手作業。Step 4までに） |
 | Step 1 記録だけ | 完了（2026-11-08 実機で43点、電池の減りは少ない） |
+| Step 2 生の線を表示 | 実装済み・実機確認待ち |
 
 ## 準備（手作業が必要なもの）
 
@@ -24,7 +25,7 @@
 5. 「割り当て」で Roads API の1日あたりリクエスト上限を設定（例：200件/日）
 6. 料金は課金設定前に [公式の料金表](https://developers.google.com/maps/billing-and-pricing/pricing) で確認
 
-APIキーはリポジトリにコミットしない（`.env*.local` に置く。`.gitignore` 済み）。
+APIキーはリポジトリにコミットしない。アプリ用キーは GitHub のシークレット `GOOGLE_MAPS_IOS_API_KEY` に登録し、ビルド時に `app.config.js` が読み込む（`gh secret set GOOGLE_MAPS_IOS_API_KEY --repo satogy/ride-log`）。
 
 ### Firebase（Step 4までに）
 

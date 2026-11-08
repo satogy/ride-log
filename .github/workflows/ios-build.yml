@@ -22,7 +22,13 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
       - name: Generate native iOS project
-        run: npx expo prebuild --platform ios --clean
+        env:
+          GOOGLE_MAPS_IOS_API_KEY: ${{ secrets.GOOGLE_MAPS_IOS_API_KEY }}
+        run: |
+          if [ -z "$GOOGLE_MAPS_IOS_API_KEY" ]; then
+            echo "::error::シークレット GOOGLE_MAPS_IOS_API_KEY が未設定です"; exit 1
+          fi
+          npx expo prebuild --platform ios --clean
       - name: Build (Release, no code signing)
         run: |
           set -o pipefail
