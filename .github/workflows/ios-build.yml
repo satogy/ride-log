@@ -29,6 +29,18 @@ jobs:
             echo "::error::シークレット GOOGLE_MAPS_IOS_API_KEY が未設定です"; exit 1
           fi
           npx expo prebuild --platform ios --clean
+      - name: Check Google Maps setup (key itself is not printed)
+        run: |
+          PLIST=$(ls ios/*/Info.plist | grep -v Pods | head -1)
+          KEY=$(/usr/libexec/PlistBuddy -c "Print :GMSApiKey" "$PLIST" 2>/dev/null || true)
+          echo "Info.plist: $PLIST"
+          echo "GMSApiKey length=${#KEY} startsWithAIza=$([[ "$KEY" == AIza* ]] && echo yes || echo no)"
+          echo "--- AppDelegate"
+          grep -n -E "GoogleMaps|provideAPIKey" ios/*/AppDelegate.swift | sed -E 's/provideAPIKey\("[^"]*"\)/provideAPIKey("***")/'
+          echo "--- Podfile"
+          grep -n "react-native-maps" ios/Podfile
+          echo "--- Podfile.lock"
+          grep -n -E "GoogleMaps|react-native-maps" ios/Podfile.lock | head
       - name: Build (Release, no code signing)
         run: |
           set -o pipefail
