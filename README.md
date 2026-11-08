@@ -10,7 +10,7 @@
 | 準備：Google Cloud（Maps SDK for iOS、Roads API、APIキー2つ） | 未（下の手順で手作業） |
 | 準備：Firebaseプロジェクト | 未（下の手順で手作業。Step 4までに） |
 | Step 1 記録だけ | 完了（2026-11-08 実機で43点、電池の減りは少ない） |
-| Step 2 生の線を表示 | 実装済み・実機確認待ち |
+| Step 2 生の線を表示 | 完了（2026-11-08 実機で線と地図を確認） |
 
 ## 準備（手作業が必要なもの）
 
@@ -39,7 +39,7 @@ APIキーはリポジトリにコミットしない。アプリ用キーは GitH
 
 1. GitHubの [Actions → iOS build (unsigned IPA)](https://github.com/satogy/ride-log/actions/workflows/ios-build.yml) で「Run workflow」（手動実行のみ。macOSは無料枠の消費が大きいため）
 2. 完了したら成果物 `ride-log-unsigned-ipa` をダウンロードして解凍し、`ride-log-unsigned.ipa` を取り出す
-3. iPhoneをPCにつなぎ、Sideloadlyに `.ipa` をドラッグ、Apple IDを入れて Start
+3. iPhoneをPCにつなぎ、Sideloadlyに `.ipa` をドラッグ、Apple IDを入れる。**Advanced Options で「Use automatic bundle ID」のチェックを外し、`jp.spiraq.ridelog.dev` を入力**してから Start（自動IDのままだとGoogle MapsのキーのバンドルID制限に合わず、地図が真っ白になる）
 4. iPhoneの「設定 → 一般 → VPNとデバイス管理」で自分のApple IDを信頼、「プライバシーとセキュリティ → デベロッパモード」をオン
 
 Releaseビルドなので開発サーバーは不要。無料のApple IDでは **7日で期限切れ**になるので、その都度Sideloadlyで入れ直す（データは上書きインストールなら残る）。
