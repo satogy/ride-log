@@ -11,9 +11,9 @@ function fuelDescription(f: FuelStop): string {
   const parts: string[] = [];
   if (f.liters != null) parts.push(`${f.liters}L`);
   if (f.priceYen != null) parts.push(`${f.priceYen.toLocaleString('ja-JP')}円`);
-  if (parts.length === 0) return '未入力（押して入力）';
+  if (parts.length === 0) return '量・金額は未入力';
   if (f.isFullTank) parts.push('満タン');
-  return parts.join('・') + '（押して修正）';
+  return parts.join('・');
 }
 
 function hhmm(ms: number): string {
@@ -43,6 +43,7 @@ export default function RideMap({ rideId, title, onClose }: Props) {
   const [points, setPoints] = useState<RidePoint[] | null>(null);
   const [fuels, setFuels] = useState<FuelStop[]>([]);
   const [editingFuelId, setEditingFuelId] = useState<number | null>(null);
+  const [selectedFuelId, setSelectedFuelId] = useState<number | null>(null);
   const mapRef = useRef<MapView>(null);
 
   const loadFuels = () => listFuelStops(rideId).then(setFuels);
@@ -61,7 +62,7 @@ export default function RideMap({ rideId, title, onClose }: Props) {
     const all = [...coords, ...placedFuels.map((f) => ({ latitude: f.lat!, longitude: f.lng! }))];
     if (all.length === 0) return;
     mapRef.current?.fitToCoordinates(all, {
-      edgePadding: { top: 80, right: 40, bottom: 160, left: 40 },
+      edgePadding: { top: 80, right: 40, bottom: 120 + fuels.length * 60, left: 40 },
       animated: false,
     });
   };
@@ -82,9 +83,8 @@ export default function RideMap({ rideId, title, onClose }: Props) {
               key={f.id}
               coordinate={{ latitude: f.lat!, longitude: f.lng! }}
               title={`給油 ${hhmm(f.t)}`}
-              description={fuelDescription(f)}
-              pinColor="orange"
-              onCalloutPress={() => setEditingFuelId(f.id)}
+              pinColor={selectedFuelId === f.id ? 'gold' : 'orange'}
+              onPress={() => setSelectedFuelId(f.id)}
             />
           ))}
         </MapView>
@@ -117,9 +117,24 @@ export default function RideMap({ rideId, title, onClose }: Props) {
               {totalYen > 0 ? `・${totalYen.toLocaleString('ja-JP')}円` : ''}
             </Text>
           ) : null}
-          {fuels.length > placedFuels.length ? (
-            <Text style={styles.panelNote}>位置を取れなかった給油が{fuels.length - placedFuels.length}件あります</Text>
-          ) : null}
+          {/* 地図の吹き出しはiOSのGoogleマップで押せないことがあるため、給油はここに一覧で出して入力ボタンを置く */}
+          {fuels.map((f) => (
+            <View key={f.id} style={[styles.fuelRow, selectedFuelId === f.id && styles.fuelRowSelected]}>
+              <Pressable style={styles.fuelInfo} onPress={() => setSelectedFuelId(f.id)}>
+                <Text style={styles.fuelTime}>
+                  ⛽ {hhmm(f.t)}
+                  {f.lat == null ? '（位置なし）' : ''}
+                </Text>
+                <Text style={styles.fuelDesc}>{fuelDescription(f)}</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setEditingFuelId(f.id)}
+                style={({ pressed }) => [styles.fuelEdit, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.fuelEditText}>{f.liters == null && f.priceYen == null ? '入力' : '修正'}</Text>
+              </Pressable>
+            </View>
+          ))}
         </View>
       ) : null}
     </View>
@@ -144,5 +159,18 @@ const styles = StyleSheet.create({
   },
   panelTitle: { fontSize: 18, fontWeight: '700' },
   panelSub: { color: '#555', marginTop: 4, fontSize: 15 },
-  panelNote: { color: '#b3261e', marginTop: 4, fontSize: 13 },
+  fuelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#ddd',
+  },
+  fuelRowSelected: { backgroundColor: '#fff4e0', borderRadius: 8 },
+  fuelInfo: { flex: 1 },
+  fuelTime: { fontSize: 16, fontWeight: '600' },
+  fuelDesc: { color: '#555', marginTop: 2 },
+  fuelEdit: { backgroundColor: '#e07a00', borderRadius: 12, paddingHorizontal: 18, paddingVertical: 10 },
+  fuelEditText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });
