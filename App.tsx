@@ -2,7 +2,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, AppState, FlatList, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { getActiveRide, listRides, RideSummary } from './src/db';
-import { ensurePermissions, resumeIfRecording, startRide, stopRide } from './src/recording';
+import FuelForm from './src/FuelForm';
+import { ensurePermissions, recordFuelStop, resumeIfRecording, startRide, stopRide } from './src/recording';
 import RideMap from './src/RideMap';
 
 // Step 1：記録だけ。ホーム（出発）と走行中（経過時間・終了）の2画面。
@@ -27,6 +28,7 @@ export default function App() {
   const [now, setNow] = useState(Date.now());
   const [busy, setBusy] = useState(false);
   const [openRide, setOpenRide] = useState<RideSummary | null>(null);
+  const [editingFuelId, setEditingFuelId] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
     const active = await getActiveRide();
@@ -83,6 +85,13 @@ export default function App() {
     }
   };
 
+  const onFuel = async () => {
+    if (busy) return;
+    const id = await recordFuelStop();
+    if (id != null) setEditingFuelId(id);
+    refresh();
+  };
+
   const current = rides.find((r) => r.status === 'recording');
   const past = rides.filter((r) => r.status !== 'recording');
 
@@ -106,7 +115,21 @@ export default function App() {
           {current?.lastPointAt ? (
             <Text style={styles.sub}>最後の点：{formatDate(current.lastPointAt)}</Text>
           ) : null}
+          {current?.fuelCount ? <Text style={styles.sub}>給油：{current.fuelCount}回</Text> : null}
         </View>
+        <Pressable
+          onPress={onFuel}
+          style={({ pressed }) => [styles.bigButton, styles.fuelButton, pressed && styles.pressed]}
+        >
+          <Text style={styles.bigButtonText}>給油</Text>
+        </Pressable>
+        <FuelForm
+          fuelId={editingFuelId}
+          onClose={() => {
+            setEditingFuelId(null);
+            refresh();
+          }}
+        />
         <Pressable
           onLongPress={onStop}
           delayLongPress={1000}
@@ -141,7 +164,7 @@ export default function App() {
           >
             <Text style={styles.rowTitle}>{formatDate(item.startedAt)}</Text>
             <Text style={styles.rowSub}>
-              {item.endedAt ? formatDuration(item.endedAt - item.startedAt) : '-'}・{item.pointCount}点 ›
+              {item.endedAt ? formatDuration(item.endedAt - item.startedAt) : '-'}・{item.pointCount}点{item.fuelCount ? `・給油${item.fuelCount}回` : ''} ›
             </Text>
           </Pressable>
         )}
@@ -165,7 +188,8 @@ const styles = StyleSheet.create({
     margin: 16,
   },
   startButton: { backgroundColor: '#1f7a3a', marginTop: 48 },
-  stopButton: { backgroundColor: '#b3261e' },
+  stopButton: { backgroundColor: '#b3261e', height: 120 },
+  fuelButton: { backgroundColor: '#e07a00' },
   pressed: { opacity: 0.7 },
   bigButtonText: { color: '#fff', fontSize: 48, fontWeight: '700' },
   hint: { color: '#fdd', fontSize: 16, marginTop: 4 },

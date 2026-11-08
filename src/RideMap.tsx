@@ -1,9 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
-import { getPoints, RidePoint } from './db';
+import { FuelStop, getPoints, listFuelStops, RidePoint } from './db';
+import FuelForm from './FuelForm';
 
 // Step 2：保存した生の点をそのまま線でつなぐ（道路吸着は Step 4）。
+// Step 3：給油地点にピンを立てる。ピンの吹き出しを押すと給油量・金額を入力・修正できる。
+
+function fuelDescription(f: FuelStop): string {
+  const parts: string[] = [];
+  if (f.liters != null) parts.push(`${f.liters}L`);
+  if (f.priceYen != null) parts.push(`${f.priceYen.toLocaleString('ja-JP')}円`);
+  if (parts.length === 0) return '未入力（押して入力）';
+  if (f.isFullTank) parts.push('満タン');
+  return parts.join('・') + '（押して修正）';
+}
+
+function hhmm(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
 
 function haversineKm(a: RidePoint, b: RidePoint): number {
   const R = 6371;
@@ -25,17 +41,26 @@ type Props = { rideId: number; title: string; onClose: () => void };
 
 export default function RideMap({ rideId, title, onClose }: Props) {
   const [points, setPoints] = useState<RidePoint[] | null>(null);
+  const [fuels, setFuels] = useState<FuelStop[]>([]);
+  const [editingFuelId, setEditingFuelId] = useState<number | null>(null);
   const mapRef = useRef<MapView>(null);
+
+  const loadFuels = () => listFuelStops(rideId).then(setFuels);
 
   useEffect(() => {
     getPoints(rideId).then(setPoints);
+    loadFuels();
   }, [rideId]);
 
   const coords = (points ?? []).map((p) => ({ latitude: p.lat, longitude: p.lng }));
+  const placedFuels = fuels.filter((f) => f.lat != null && f.lng != null);
+  const totalLiters = fuels.reduce((s, f) => s + (f.liters ?? 0), 0);
+  const totalYen = fuels.reduce((s, f) => s + (f.priceYen ?? 0), 0);
 
   const fit = () => {
-    if (coords.length === 0) return;
-    mapRef.current?.fitToCoordinates(coords, {
+    const all = [...coords, ...placedFuels.map((f) => ({ latitude: f.lat!, longitude: f.lng! }))];
+    if (all.length === 0) return;
+    mapRef.current?.fitToCoordinates(all, {
       edgePadding: { top: 80, right: 40, bottom: 160, left: 40 },
       animated: false,
     });
@@ -52,8 +77,26 @@ export default function RideMap({ rideId, title, onClose }: Props) {
           <Polyline coordinates={coords} strokeColor="#d1495b" strokeWidth={4} />
           <Marker coordinate={coords[0]} title="出発" pinColor="green" />
           <Marker coordinate={coords[coords.length - 1]} title="終了" pinColor="red" />
+          {placedFuels.map((f) => (
+            <Marker
+              key={f.id}
+              coordinate={{ latitude: f.lat!, longitude: f.lng! }}
+              title={`給油 ${hhmm(f.t)}`}
+              description={fuelDescription(f)}
+              pinColor="orange"
+              onCalloutPress={() => setEditingFuelId(f.id)}
+            />
+          ))}
         </MapView>
       )}
+
+      <FuelForm
+        fuelId={editingFuelId}
+        onClose={() => {
+          setEditingFuelId(null);
+          loadFuels();
+        }}
+      />
 
       <View style={styles.header} pointerEvents="box-none">
         <Pressable onPress={onClose} style={styles.back}>
@@ -67,6 +110,16 @@ export default function RideMap({ rideId, title, onClose }: Props) {
           <Text style={styles.panelSub}>
             {points.length}点・直線つなぎの距離 {rawDistanceKm(points).toFixed(1)} km
           </Text>
+          {fuels.length > 0 ? (
+            <Text style={styles.panelSub}>
+              給油 {fuels.length}回
+              {totalLiters > 0 ? `・${Math.round(totalLiters * 10) / 10}L` : ''}
+              {totalYen > 0 ? `・${totalYen.toLocaleString('ja-JP')}円` : ''}
+            </Text>
+          ) : null}
+          {fuels.length > placedFuels.length ? (
+            <Text style={styles.panelNote}>位置を取れなかった給油が{fuels.length - placedFuels.length}件あります</Text>
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -91,4 +144,5 @@ const styles = StyleSheet.create({
   },
   panelTitle: { fontSize: 18, fontWeight: '700' },
   panelSub: { color: '#555', marginTop: 4, fontSize: 15 },
+  panelNote: { color: '#b3261e', marginTop: 4, fontSize: 13 },
 });

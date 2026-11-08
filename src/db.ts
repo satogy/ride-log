@@ -44,6 +44,18 @@ export function getDb(): Promise<SQLite.SQLiteDatabase> {
           speed REAL
         );
         CREATE INDEX IF NOT EXISTS idx_points_ride ON points(ride_id, t);
+        CREATE TABLE IF NOT EXISTS fuel_stops (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          ride_id INTEGER NOT NULL REFERENCES rides(id),
+          t INTEGER NOT NULL,
+          lat REAL,
+          lng REAL,
+          accuracy REAL,
+          liters REAL,
+          price_yen INTEGER,
+          is_full_tank INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE INDEX IF NOT EXISTS idx_fuel_ride ON fuel_stops(ride_id, t);
       `);
       return db;
     })();
@@ -102,17 +114,26 @@ export async function insertPoints(rideId: number, points: RidePoint[]): Promise
   });
 }
 
-export type RideSummary = Ride & { pointCount: number; lastPointAt: number | null };
+export type RideSummary = Ride & { pointCount: number; lastPointAt: number | null; fuelCount: number };
 
 export async function listRides(limit = 20): Promise<RideSummary[]> {
   const db = await getDb();
-  const rows = await db.getAllAsync<RideRow & { point_count: number; last_point_at: number | null }>(
-    `SELECT r.*, COUNT(p.id) AS point_count, MAX(p.t) AS last_point_at
-       FROM rides r LEFT JOIN points p ON p.ride_id = r.id
-      GROUP BY r.id ORDER BY r.id DESC LIMIT ?`,
+  const rows = await db.getAllAsync<
+    RideRow & { point_count: number; last_point_at: number | null; fuel_count: number }
+  >(
+    `SELECT r.*,
+            (SELECT COUNT(*) FROM points p WHERE p.ride_id = r.id) AS point_count,
+            (SELECT MAX(t) FROM points p WHERE p.ride_id = r.id) AS last_point_at,
+            (SELECT COUNT(*) FROM fuel_stops f WHERE f.ride_id = r.id) AS fuel_count
+       FROM rides r ORDER BY r.id DESC LIMIT ?`,
     limit,
   );
-  return rows.map((r) => ({ ...toRide(r), pointCount: r.point_count, lastPointAt: r.last_point_at }));
+  return rows.map((r) => ({
+    ...toRide(r),
+    pointCount: r.point_count,
+    lastPointAt: r.last_point_at,
+    fuelCount: r.fuel_count,
+  }));
 }
 
 export async function getPoints(rideId: number): Promise<RidePoint[]> {
@@ -121,4 +142,89 @@ export async function getPoints(rideId: number): Promise<RidePoint[]> {
     'SELECT lat, lng, t, accuracy, speed FROM points WHERE ride_id = ? ORDER BY t',
     rideId,
   );
+}
+
+// ---- 給油（Step 3） ----
+
+export type FuelStop = {
+  id: number;
+  rideId: number;
+  t: number;
+  lat: number | null; // 位置の取得前・失敗時は null（給油の記録自体は残す）
+  lng: number | null;
+  accuracy: number | null;
+  liters: number | null;
+  priceYen: number | null;
+  isFullTank: boolean;
+};
+
+type FuelRow = {
+  id: number;
+  ride_id: number;
+  t: number;
+  lat: number | null;
+  lng: number | null;
+  accuracy: number | null;
+  liters: number | null;
+  price_yen: number | null;
+  is_full_tank: number;
+};
+
+const toFuel = (r: FuelRow): FuelStop => ({
+  id: r.id,
+  rideId: r.ride_id,
+  t: r.t,
+  lat: r.lat,
+  lng: r.lng,
+  accuracy: r.accuracy,
+  liters: r.liters,
+  priceYen: r.price_yen,
+  isFullTank: r.is_full_tank === 1,
+});
+
+export async function createFuelStop(rideId: number, t: number): Promise<number> {
+  const db = await getDb();
+  const res = await db.runAsync('INSERT INTO fuel_stops (ride_id, t) VALUES (?, ?)', rideId, t);
+  return res.lastInsertRowId;
+}
+
+export async function setFuelStopLocation(
+  id: number,
+  lat: number,
+  lng: number,
+  accuracy: number | null,
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('UPDATE fuel_stops SET lat = ?, lng = ?, accuracy = ? WHERE id = ?', lat, lng, accuracy, id);
+}
+
+export async function updateFuelStopDetails(
+  id: number,
+  details: { liters: number | null; priceYen: number | null; isFullTank: boolean },
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE fuel_stops SET liters = ?, price_yen = ?, is_full_tank = ? WHERE id = ?',
+    details.liters,
+    details.priceYen,
+    details.isFullTank ? 1 : 0,
+    id,
+  );
+}
+
+export async function getFuelStop(id: number): Promise<FuelStop | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<FuelRow>('SELECT * FROM fuel_stops WHERE id = ?', id);
+  return row ? toFuel(row) : null;
+}
+
+export async function listFuelStops(rideId: number): Promise<FuelStop[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<FuelRow>('SELECT * FROM fuel_stops WHERE ride_id = ? ORDER BY t', rideId);
+  return rows.map(toFuel);
+}
+
+export async function deleteFuelStop(id: number): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM fuel_stops WHERE id = ?', id);
 }

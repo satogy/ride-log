@@ -1,6 +1,14 @@
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
-import { createRide, finishRide, getActiveRide, insertPoints, RidePoint } from './db';
+import {
+  createFuelStop,
+  createRide,
+  finishRide,
+  getActiveRide,
+  insertPoints,
+  RidePoint,
+  setFuelStopLocation,
+} from './db';
 
 export const LOCATION_TASK = 'ride-log-location';
 
@@ -91,4 +99,40 @@ export async function resumeIfRecording(): Promise<number | null> {
   const perm = await Location.getBackgroundPermissionsAsync();
   if (perm.status === 'granted') await startRide();
   return ride.id;
+}
+
+// ---- 給油（Step 3） ----
+
+const FUEL_FIX_TIMEOUT_MS = 20_000;
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([p, new Promise<null>((resolve) => setTimeout(() => resolve(null), ms))]);
+}
+
+/**
+ * 給油ボタン：記録はすぐ作り（入力画面をすぐ開けるように）、位置は高精度で取りに行って後から埋める。
+ * 走行中の記録は省電力の Balanced だが、給油地点だけは High で1点取る。
+ * @returns 作成した給油記録のID（記録中のライドがなければ null）
+ */
+export async function recordFuelStop(): Promise<number | null> {
+  const ride = await getActiveRide();
+  if (!ride) return null;
+  const fuelId = await createFuelStop(ride.id, Date.now());
+
+  (async () => {
+    try {
+      const fix = await withTimeout(
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
+        FUEL_FIX_TIMEOUT_MS,
+      );
+      const loc = fix ?? (await Location.getLastKnownPositionAsync());
+      if (loc) {
+        await setFuelStopLocation(fuelId, loc.coords.latitude, loc.coords.longitude, loc.coords.accuracy ?? null);
+      }
+    } catch (e) {
+      console.warn('[fuel] 位置を取得できませんでした', e);
+    }
+  })();
+
+  return fuelId;
 }
