@@ -52,6 +52,21 @@ jobs:
             -derivedDataPath ios/build CODE_SIGNING_ALLOWED=NO build > xcodebuild.log 2>&1 \
             || { grep -nE "error:|fatal|BUILD FAILED" xcodebuild.log | head -50; tail -80 xcodebuild.log; exit 1; }
           tail -20 xcodebuild.log
+      - name: Inspect built app for Google Maps (key itself is not printed)
+        env:
+          GOOGLE_MAPS_IOS_API_KEY: ${{ secrets.GOOGLE_MAPS_IOS_API_KEY }}
+        run: |
+          APP="ios/build/Build/Products/Release-iphoneos/$SCHEME.app"
+          BIN="$APP/$SCHEME"
+          echo "key literal in executable: $(grep -a -c -F "$GOOGLE_MAPS_IOS_API_KEY" "$BIN" || true)"
+          echo "GMSServices symbols in executable: $(strings "$BIN" | grep -c GMSServices || true)"
+          echo "--- bundles / frameworks"
+          ls "$APP" | grep -iE "bundle|Frameworks" || true
+          ls "$APP/Frameworks" 2>/dev/null | head -40 || true
+          echo "--- GoogleMaps resources"
+          find "$APP" -maxdepth 2 -iname "*GoogleMaps*" | head
+          echo "--- canImport in build log"
+          grep -n -iE "GoogleMaps" xcodebuild.log | grep -iE "warning|error|AppDelegate" | head -20 || true
       - name: Package unsigned IPA
         run: |
           mkdir -p Payload
