@@ -63,7 +63,7 @@ export default function App() {
       const n = await copyBackupToClipboard();
       Alert.alert(
         'コピーしました',
-        `ライド${n.rides}件・点${n.points}個・給油${n.fuelStops}件をコピーしました。移したいアプリを開いて「データを貼り付け」を押してください。`,
+        `ライド${n.rides}件・点${n.points}個・給油${n.fuelStops}件・休憩メモ${n.restNotes}件をコピーしました。移したいアプリを開いて「データを貼り付け」を押してください。`,
       );
     } catch (e) {
       Alert.alert('コピーできませんでした', String(e));

@@ -27,6 +27,17 @@ type FuelRow = {
   is_full_tank: number;
 };
 
+type RestNoteRow = {
+  ride_id: number;
+  start_t: number;
+  lat: number;
+  lng: number;
+  kind: string | null;
+  place_name: string | null;
+  memo: string | null;
+  updated_at: number;
+};
+
 type Backup = {
   format: typeof FORMAT;
   version: number;
@@ -34,10 +45,16 @@ type Backup = {
   rides: RideRow[];
   points: PointRow[];
   fuelStops: FuelRow[];
+  restNotes?: RestNoteRow[]; // 休憩メモ（後から追加。古いコピーには無い）
 };
 
 /** 全データをクリップボードにコピーし、件数を返す */
-export async function copyBackupToClipboard(): Promise<{ rides: number; points: number; fuelStops: number }> {
+export async function copyBackupToClipboard(): Promise<{
+  rides: number;
+  points: number;
+  fuelStops: number;
+  restNotes: number;
+}> {
   const db = await getDb();
   const rides = await db.getAllAsync<RideRow>('SELECT id, started_at, ended_at, status FROM rides ORDER BY id');
   const points = await db.getAllAsync<PointRow>(
@@ -46,9 +63,20 @@ export async function copyBackupToClipboard(): Promise<{ rides: number; points: 
   const fuelStops = await db.getAllAsync<FuelRow>(
     'SELECT ride_id, t, lat, lng, accuracy, liters, price_yen, is_full_tank FROM fuel_stops ORDER BY ride_id, t',
   );
-  const backup: Backup = { format: FORMAT, version: VERSION, exportedAt: Date.now(), rides, points, fuelStops };
+  const restNotes = await db.getAllAsync<RestNoteRow>(
+    'SELECT ride_id, start_t, lat, lng, kind, place_name, memo, updated_at FROM rest_notes ORDER BY ride_id, start_t',
+  );
+  const backup: Backup = {
+    format: FORMAT,
+    version: VERSION,
+    exportedAt: Date.now(),
+    rides,
+    points,
+    fuelStops,
+    restNotes,
+  };
   await Clipboard.setStringAsync(JSON.stringify(backup));
-  return { rides: rides.length, points: points.length, fuelStops: fuelStops.length };
+  return { rides: rides.length, points: points.length, fuelStops: fuelStops.length, restNotes: restNotes.length };
 }
 
 /**
@@ -110,6 +138,20 @@ export async function importBackupFromClipboard(): Promise<{ imported: number; s
           f.liters,
           f.price_yen,
           f.is_full_tank,
+        );
+      }
+      for (const n of backup.restNotes ?? []) {
+        if (n.ride_id !== r.id) continue;
+        await tx.runAsync(
+          'INSERT OR IGNORE INTO rest_notes (ride_id, start_t, lat, lng, kind, place_name, memo, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          newId,
+          n.start_t,
+          n.lat,
+          n.lng,
+          n.kind,
+          n.place_name,
+          n.memo,
+          n.updated_at,
         );
       }
       imported++;

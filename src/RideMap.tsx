@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
-import { FuelStop, getPoints, listFuelStops, RidePoint } from './db';
+import { FuelStop, getPoints, listFuelStops, listRestNotes, RestNote, RidePoint } from './db';
 import FuelForm from './FuelForm';
-import { detectRests, movingMs } from './rests';
+import RestForm, { kindInfo } from './RestForm';
+import { detectRests, movingMs, Rest } from './rests';
 
 // Step 2：保存した生の点をそのまま線でつなぐ（道路吸着は Step 4）。
 // Step 3：給油地点にピンを立てる。給油量・金額は下の一覧のボタンから入力・修正する。
 // 休憩：5分以上の停車を青いピンで表示する（給油と重なる停車は給油として扱い、休憩ピンは出さない）。
+// 休憩ごとに「何をしたか・お店の名前・ひとこと」のメモを下の一覧から残せる。
 
 function minutes(ms: number): number {
   return Math.round(ms / 60000);
@@ -55,14 +57,29 @@ export default function RideMap({ rideId, title, onClose }: Props) {
   const [fuels, setFuels] = useState<FuelStop[]>([]);
   const [editingFuelId, setEditingFuelId] = useState<number | null>(null);
   const [selectedFuelId, setSelectedFuelId] = useState<number | null>(null);
+  const [notes, setNotes] = useState<RestNote[]>([]);
+  const [editingRest, setEditingRest] = useState<Rest | null>(null);
   const mapRef = useRef<MapView>(null);
 
   const loadFuels = () => listFuelStops(rideId).then(setFuels);
+  const loadNotes = () => listRestNotes(rideId).then(setNotes);
 
   useEffect(() => {
     getPoints(rideId).then(setPoints);
     loadFuels();
+    loadNotes();
   }, [rideId]);
+
+  const noteOf = (r: Rest) => notes.find((n) => n.startT === r.startT);
+  const restTitle = (r: Rest) => {
+    const n = noteOf(r);
+    const k = kindInfo(n?.kind);
+    return `${k?.icon ?? '🅿️'} ${n?.placeName ?? k?.label ?? '休憩'}`;
+  };
+  const restDescription = (r: Rest) => {
+    const memo = noteOf(r)?.memo;
+    return `${hhmm(r.startT)}〜${hhmm(r.endT)}・約${minutes(r.durationMs)}分${memo ? `・${memo}` : ''}`;
+  };
 
   const coords = (points ?? []).map((p) => ({ latitude: p.lat, longitude: p.lng }));
   const placedFuels = fuels.filter((f) => f.lat != null && f.lng != null);
@@ -77,7 +94,7 @@ export default function RideMap({ rideId, title, onClose }: Props) {
     const all = [...coords, ...placedFuels.map((f) => ({ latitude: f.lat!, longitude: f.lng! }))];
     if (all.length === 0) return;
     mapRef.current?.fitToCoordinates(all, {
-      edgePadding: { top: 80, right: 40, bottom: 120 + fuels.length * 60, left: 40 },
+      edgePadding: { top: 80, right: 40, bottom: 120 + Math.min(fuels.length + rests.length, 5) * 60, left: 40 },
       animated: false,
     });
   };
@@ -106,8 +123,8 @@ export default function RideMap({ rideId, title, onClose }: Props) {
             <Marker
               key={`rest-${r.startT}`}
               coordinate={{ latitude: r.lat, longitude: r.lng }}
-              title={`休憩 ${hhmm(r.startT)}〜${hhmm(r.endT)}`}
-              description={`約${minutes(r.durationMs)}分`}
+              title={restTitle(r)}
+              description={restDescription(r)}
               pinColor="blue"
             />
           ))}
@@ -121,6 +138,14 @@ export default function RideMap({ rideId, title, onClose }: Props) {
           loadFuels();
         }}
       />
+      <RestForm
+        rideId={rideId}
+        rest={editingRest}
+        onClose={() => {
+          setEditingRest(null);
+          loadNotes();
+        }}
+      />
 
       <View style={styles.header} pointerEvents="box-none">
         <Pressable onPress={onClose} style={styles.back}>
@@ -129,7 +154,7 @@ export default function RideMap({ rideId, title, onClose }: Props) {
       </View>
 
       {points && points.length > 0 ? (
-        <View style={styles.panel}>
+        <ScrollView style={styles.panel} contentContainerStyle={styles.panelContent}>
           <Text style={styles.panelTitle}>{title}</Text>
           <Text style={styles.panelSub}>
             {points.length}点・直線つなぎの距離 {rawDistanceKm(points).toFixed(1)} km
@@ -163,7 +188,29 @@ export default function RideMap({ rideId, title, onClose }: Props) {
               </Pressable>
             </View>
           ))}
-        </View>
+          {rests.map((r) => {
+            const n = noteOf(r);
+            const k = kindInfo(n?.kind);
+            return (
+              <View key={`rest-row-${r.startT}`} style={styles.fuelRow}>
+                <View style={styles.fuelInfo}>
+                  <Text style={styles.fuelTime}>
+                    {k?.icon ?? '🅿️'} {hhmm(r.startT)}〜{hhmm(r.endT)}（約{minutes(r.durationMs)}分）
+                  </Text>
+                  <Text style={styles.fuelDesc} numberOfLines={2}>
+                    {n ? [k?.label, n.placeName, n.memo].filter(Boolean).join('・') : 'メモなし'}
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => setEditingRest(r)}
+                  style={({ pressed }) => [styles.restEdit, pressed && { opacity: 0.7 }]}
+                >
+                  <Text style={styles.fuelEditText}>{n ? '修正' : 'メモ'}</Text>
+                </Pressable>
+              </View>
+            );
+          })}
+        </ScrollView>
       ) : null}
     </View>
   );
@@ -181,10 +228,11 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     bottom: 40,
+    maxHeight: '50%',
     backgroundColor: '#fff',
     borderRadius: 16,
-    padding: 16,
   },
+  panelContent: { padding: 16 },
   panelTitle: { fontSize: 18, fontWeight: '700' },
   panelSub: { color: '#555', marginTop: 4, fontSize: 15 },
   fuelRow: {
@@ -200,5 +248,6 @@ const styles = StyleSheet.create({
   fuelTime: { fontSize: 16, fontWeight: '600' },
   fuelDesc: { color: '#555', marginTop: 2 },
   fuelEdit: { backgroundColor: '#e07a00', borderRadius: 12, paddingHorizontal: 18, paddingVertical: 10 },
+  restEdit: { backgroundColor: '#2a6fdb', borderRadius: 12, paddingHorizontal: 18, paddingVertical: 10 },
   fuelEditText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

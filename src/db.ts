@@ -56,6 +56,18 @@ export function getDb(): Promise<SQLite.SQLiteDatabase> {
           is_full_tank INTEGER NOT NULL DEFAULT 1
         );
         CREATE INDEX IF NOT EXISTS idx_fuel_ride ON fuel_stops(ride_id, t);
+        CREATE TABLE IF NOT EXISTS rest_notes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          ride_id INTEGER NOT NULL REFERENCES rides(id),
+          start_t INTEGER NOT NULL,
+          lat REAL NOT NULL,
+          lng REAL NOT NULL,
+          kind TEXT,
+          place_name TEXT,
+          memo TEXT,
+          updated_at INTEGER NOT NULL,
+          UNIQUE (ride_id, start_t)
+        );
       `);
       return db;
     })();
@@ -227,4 +239,73 @@ export async function listFuelStops(rideId: number): Promise<FuelStop[]> {
 export async function deleteFuelStop(id: number): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM fuel_stops WHERE id = ?', id);
+}
+
+// ---- 休憩メモ ----
+// 休憩そのものは点の並びから毎回計算する（rests.ts）。メモだけを「ライド＋止まった時刻」に結びつけて保存する。
+// 将来ほかの人と共有できるよう、場所（緯度経度）と種類・店名もメモ側に持たせる。
+
+export type RestKind = 'lunch' | 'cafe' | 'view' | 'break' | 'other';
+
+export type RestNote = {
+  rideId: number;
+  startT: number;
+  lat: number;
+  lng: number;
+  kind: RestKind | null;
+  placeName: string | null;
+  memo: string | null;
+  updatedAt: number;
+};
+
+type RestNoteRow = {
+  ride_id: number;
+  start_t: number;
+  lat: number;
+  lng: number;
+  kind: RestKind | null;
+  place_name: string | null;
+  memo: string | null;
+  updated_at: number;
+};
+
+const toRestNote = (r: RestNoteRow): RestNote => ({
+  rideId: r.ride_id,
+  startT: r.start_t,
+  lat: r.lat,
+  lng: r.lng,
+  kind: r.kind,
+  placeName: r.place_name,
+  memo: r.memo,
+  updatedAt: r.updated_at,
+});
+
+export async function listRestNotes(rideId: number): Promise<RestNote[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<RestNoteRow>('SELECT * FROM rest_notes WHERE ride_id = ? ORDER BY start_t', rideId);
+  return rows.map(toRestNote);
+}
+
+export async function saveRestNote(note: Omit<RestNote, 'updatedAt'>): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO rest_notes (ride_id, start_t, lat, lng, kind, place_name, memo, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (ride_id, start_t) DO UPDATE SET
+       lat = excluded.lat, lng = excluded.lng, kind = excluded.kind,
+       place_name = excluded.place_name, memo = excluded.memo, updated_at = excluded.updated_at`,
+    note.rideId,
+    note.startT,
+    note.lat,
+    note.lng,
+    note.kind,
+    note.placeName,
+    note.memo,
+    Date.now(),
+  );
+}
+
+export async function deleteRestNote(rideId: number, startT: number): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM rest_notes WHERE ride_id = ? AND start_t = ?', rideId, startT);
 }
