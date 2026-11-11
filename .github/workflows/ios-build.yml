@@ -11,6 +11,10 @@ jobs:
   build:
     runs-on: macos-26
     timeout-minutes: 60
+    # キーはジョブ全体に渡す。prebuild だけでなく xcodebuild 中にも expo-constants が app.config.js を
+    # 読み直してアプリ内の設定（extra）を作るため、ここで渡さないと Places 検索用のキーが空になる。
+    env:
+      GOOGLE_MAPS_IOS_API_KEY: ${{ secrets.GOOGLE_MAPS_IOS_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
