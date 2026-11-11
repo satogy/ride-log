@@ -34,6 +34,7 @@ type RestNoteRow = {
   lng: number;
   kind: string | null;
   place_name: string | null;
+  place_id?: string | null;
   memo: string | null;
   updated_at: number;
 };
@@ -64,7 +65,7 @@ export async function copyBackupToClipboard(): Promise<{
     'SELECT ride_id, t, lat, lng, accuracy, liters, price_yen, is_full_tank FROM fuel_stops ORDER BY ride_id, t',
   );
   const restNotes = await db.getAllAsync<RestNoteRow>(
-    'SELECT ride_id, start_t, lat, lng, kind, place_name, memo, updated_at FROM rest_notes ORDER BY ride_id, start_t',
+    'SELECT ride_id, start_t, lat, lng, kind, place_name, place_id, memo, updated_at FROM rest_notes ORDER BY ride_id, start_t',
   );
   const backup: Backup = {
     format: FORMAT,
@@ -143,13 +144,14 @@ export async function importBackupFromClipboard(): Promise<{ imported: number; s
       for (const n of backup.restNotes ?? []) {
         if (n.ride_id !== r.id) continue;
         await tx.runAsync(
-          'INSERT OR IGNORE INTO rest_notes (ride_id, start_t, lat, lng, kind, place_name, memo, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          'INSERT OR IGNORE INTO rest_notes (ride_id, start_t, lat, lng, kind, place_name, place_id, memo, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
           newId,
           n.start_t,
           n.lat,
           n.lng,
           n.kind,
           n.place_name,
+          n.place_id ?? null,
           n.memo,
           n.updated_at,
         );

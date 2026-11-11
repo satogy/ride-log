@@ -69,6 +69,11 @@ export function getDb(): Promise<SQLite.SQLiteDatabase> {
           UNIQUE (ride_id, start_t)
         );
       `);
+      // 後から足した列（既に作られた表にも追加する）
+      const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(rest_notes)');
+      if (!cols.some((c) => c.name === 'place_id')) {
+        await db.execAsync('ALTER TABLE rest_notes ADD COLUMN place_id TEXT');
+      }
       return db;
     })();
   }
@@ -254,6 +259,7 @@ export type RestNote = {
   lng: number;
   kind: RestKind | null;
   placeName: string | null;
+  placeId: string | null; // Googleマップの候補から選んだときの place ID
   memo: string | null;
   updatedAt: number;
 };
@@ -265,6 +271,7 @@ type RestNoteRow = {
   lng: number;
   kind: RestKind | null;
   place_name: string | null;
+  place_id: string | null;
   memo: string | null;
   updated_at: number;
 };
@@ -276,6 +283,7 @@ const toRestNote = (r: RestNoteRow): RestNote => ({
   lng: r.lng,
   kind: r.kind,
   placeName: r.place_name,
+  placeId: r.place_id,
   memo: r.memo,
   updatedAt: r.updated_at,
 });
@@ -289,17 +297,18 @@ export async function listRestNotes(rideId: number): Promise<RestNote[]> {
 export async function saveRestNote(note: Omit<RestNote, 'updatedAt'>): Promise<void> {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO rest_notes (ride_id, start_t, lat, lng, kind, place_name, memo, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO rest_notes (ride_id, start_t, lat, lng, kind, place_name, place_id, memo, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (ride_id, start_t) DO UPDATE SET
-       lat = excluded.lat, lng = excluded.lng, kind = excluded.kind,
-       place_name = excluded.place_name, memo = excluded.memo, updated_at = excluded.updated_at`,
+       lat = excluded.lat, lng = excluded.lng, kind = excluded.kind, place_name = excluded.place_name,
+       place_id = excluded.place_id, memo = excluded.memo, updated_at = excluded.updated_at`,
     note.rideId,
     note.startT,
     note.lat,
     note.lng,
     note.kind,
     note.placeName,
+    note.placeId,
     note.memo,
     Date.now(),
   );

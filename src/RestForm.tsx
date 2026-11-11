@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { deleteRestNote, listRestNotes, RestKind, saveRestNote } from './db';
+import { PlaceSuggestion, searchNearbyPlaces } from './places';
 import type { Rest } from './rests';
 
 // 休憩メモ。どこで・何をしたか（ランチ、コーヒーなど）を残す。
@@ -37,6 +40,9 @@ type Props = {
 export default function RestForm({ rideId, rest, onClose }: Props) {
   const [kind, setKind] = useState<RestKind | null>(null);
   const [placeName, setPlaceName] = useState('');
+  const [placeId, setPlaceId] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<PlaceSuggestion[] | null>(null);
+  const [searching, setSearching] = useState(false);
   const [memo, setMemo] = useState('');
   const [hasNote, setHasNote] = useState(false);
 
@@ -46,6 +52,8 @@ export default function RestForm({ rideId, rest, onClose }: Props) {
       const n = notes.find((x) => x.startT === rest.startT);
       setKind(n?.kind ?? null);
       setPlaceName(n?.placeName ?? '');
+      setPlaceId(n?.placeId ?? null);
+      setSuggestions(null);
       setMemo(n?.memo ?? '');
       setHasNote(n != null);
     });
@@ -68,9 +76,28 @@ export default function RestForm({ rideId, rest, onClose }: Props) {
       lng: rest.lng,
       kind,
       placeName: p || null,
+      placeId: p ? placeId : null,
       memo: m || null,
     });
     onClose(true);
+  };
+
+  const findNearby = async () => {
+    setSearching(true);
+    try {
+      setSuggestions(await searchNearbyPlaces(rest.lat, rest.lng));
+    } catch (e) {
+      Alert.alert('近くのお店を探せませんでした', e instanceof Error ? e.message : String(e));
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const pick = (s: PlaceSuggestion) => {
+    setPlaceName(s.name);
+    setPlaceId(s.id);
+    if (kind == null && s.kind) setKind(s.kind);
+    setSuggestions(null);
   };
 
   const remove = () => {
@@ -120,10 +147,35 @@ export default function RestForm({ rideId, rest, onClose }: Props) {
           <TextInput
             style={styles.input}
             value={placeName}
-            onChangeText={setPlaceName}
+            onChangeText={(t) => {
+              setPlaceName(t);
+              setPlaceId(null); // 手で直したら候補との結びつきは外す
+            }}
             placeholder="例：道の駅〇〇、△△食堂"
             returnKeyType="done"
           />
+          {suggestions == null ? (
+            <Pressable onPress={findNearby} disabled={searching} style={styles.nearbyButton}>
+              {searching ? (
+                <ActivityIndicator />
+              ) : (
+                <Text style={styles.nearbyText}>📍 近くのお店をGoogleマップから探す</Text>
+              )}
+            </Pressable>
+          ) : suggestions.length === 0 ? (
+            <Text style={styles.note}>近く（300m以内）に候補が見つかりませんでした。</Text>
+          ) : (
+            <ScrollView style={styles.suggestList} keyboardShouldPersistTaps="handled">
+              {suggestions.map((s) => (
+                <Pressable key={s.id} onPress={() => pick(s)} style={styles.suggestRow}>
+                  <Text style={styles.suggestName}>{s.name}</Text>
+                  <Text style={styles.suggestSub}>
+                    {[s.typeLabel, `${s.distanceM}m`].filter(Boolean).join('・')}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
 
           <Text style={styles.label}>ひとこと</Text>
           <TextInput
@@ -174,6 +226,12 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   memo: { minHeight: 80, textAlignVertical: 'top' },
+  nearbyButton: { marginTop: 8, paddingVertical: 10, alignItems: 'center', borderRadius: 12, backgroundColor: '#eef3fc' },
+  nearbyText: { color: '#2a6fdb', fontSize: 16, fontWeight: '600' },
+  suggestList: { maxHeight: 200, marginTop: 8, borderWidth: 1, borderColor: '#ddd', borderRadius: 12 },
+  suggestRow: { paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#ddd' },
+  suggestName: { fontSize: 17 },
+  suggestSub: { color: '#777', fontSize: 13, marginTop: 2 },
   primary: {
     backgroundColor: '#2a6fdb',
     borderRadius: 16,

@@ -7,6 +7,8 @@ module.exports = ({ config }) => {
   }
   return {
     ...config,
+    // 休憩メモの「近くのお店」検索（Places API）でも同じアプリ用キーを使う
+    extra: { ...(config.extra ?? {}), googleIosApiKey: iosKey ?? '' },
     plugins: [...(config.plugins ?? []), ['react-native-maps', { iosGoogleMapsApiKey: iosKey ?? '' }]],
   };
 };
