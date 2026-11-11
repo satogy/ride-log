@@ -6,6 +6,7 @@ import { getActiveRide, listRides, RideSummary } from './src/db';
 import FuelForm from './src/FuelForm';
 import { ensurePermissions, recordFuelStop, resumeIfRecording, startRide, stopRide } from './src/recording';
 import RideMap from './src/RideMap';
+import { copyBackupToClipboard, importBackupFromClipboard } from './src/backup';
 
 // Step 1：記録だけ。ホーム（出発）と走行中（経過時間・終了）の2画面。
 // 走行中も地図は描かない。点の数はアプリを開いている間だけ確認用に表示する。
@@ -55,6 +56,40 @@ export default function App() {
       clearInterval(poll);
     };
   }, [activeStartedAt, refresh]);
+
+  // 走行データの引っ越し（バンドルIDが変わったアプリ間で、クリップボード経由で移す）
+  const onCopyData = async () => {
+    try {
+      const n = await copyBackupToClipboard();
+      Alert.alert(
+        'コピーしました',
+        `ライド${n.rides}件・点${n.points}個・給油${n.fuelStops}件をコピーしました。移したいアプリを開いて「データを貼り付け」を押してください。`,
+      );
+    } catch (e) {
+      Alert.alert('コピーできませんでした', String(e));
+    }
+  };
+
+  const onPasteData = () => {
+    Alert.alert('データを貼り付けますか？', 'コピーした走行データをこのアプリに取り込みます。同じライドは重複して取り込みません。', [
+      { text: 'キャンセル', style: 'cancel' },
+      {
+        text: '貼り付ける',
+        onPress: async () => {
+          try {
+            const r = await importBackupFromClipboard();
+            await refresh();
+            Alert.alert(
+              '取り込みました',
+              `ライド${r.imported}件を取り込みました${r.skipped ? `（取り込み済みの${r.skipped}件は飛ばしました）` : ''}。`,
+            );
+          } catch (e) {
+            Alert.alert('取り込めませんでした', e instanceof Error ? e.message : String(e));
+          }
+        },
+      },
+    ]);
+  };
 
   const onStart = async () => {
     if (busy) return;
@@ -157,6 +192,14 @@ export default function App() {
       <Text style={styles.footer}>
         v{Application.nativeApplicationVersion} ・ {Application.applicationId}
       </Text>
+      <View style={styles.backupRow}>
+        <Pressable onPress={onCopyData} style={styles.backupButton}>
+          <Text style={styles.backupText}>データをコピー</Text>
+        </Pressable>
+        <Pressable onPress={onPasteData} style={styles.backupButton}>
+          <Text style={styles.backupText}>データを貼り付け</Text>
+        </Pressable>
+      </View>
       <Text style={styles.sectionTitle}>これまでのライド</Text>
       <FlatList
         data={past}
@@ -204,4 +247,7 @@ const styles = StyleSheet.create({
   rowTitle: { fontSize: 16 },
   rowSub: { color: '#666', marginTop: 2 },
   footer: { color: '#999', fontSize: 12, textAlign: 'center', marginTop: -4 },
+  backupRow: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 8 },
+  backupButton: { borderWidth: 1, borderColor: '#ccc', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
+  backupText: { color: '#555', fontSize: 13 },
 });
