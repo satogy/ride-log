@@ -1,3 +1,4 @@
+import * as Application from 'expo-application';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, AppState, FlatList, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
@@ -169,6 +170,10 @@ export default function App() {
           </Pressable>
         )}
       />
+      {/* 地図が出ないときの確認用：実際にインストールされたバンドルID（Sideloadlyで変わることがある） */}
+      <Text style={styles.footer}>
+        v{Application.nativeApplicationVersion} ・ {Application.applicationId}
+      </Text>
     </SafeAreaView>
   );
 }
@@ -198,4 +203,5 @@ const styles = StyleSheet.create({
   row: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#ccc' },
   rowTitle: { fontSize: 16 },
   rowSub: { color: '#666', marginTop: 2 },
+  footer: { color: '#999', fontSize: 12, textAlign: 'center', marginTop: 8 },
 });

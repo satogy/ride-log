@@ -3,9 +3,20 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { FuelStop, getPoints, listFuelStops, RidePoint } from './db';
 import FuelForm from './FuelForm';
+import { detectRests, movingMs } from './rests';
 
 // Step 2：保存した生の点をそのまま線でつなぐ（道路吸着は Step 4）。
-// Step 3：給油地点にピンを立てる。ピンの吹き出しを押すと給油量・金額を入力・修正できる。
+// Step 3：給油地点にピンを立てる。給油量・金額は下の一覧のボタンから入力・修正する。
+// 休憩：5分以上の停車を青いピンで表示する（給油と重なる停車は給油として扱い、休憩ピンは出さない）。
+
+function minutes(ms: number): number {
+  return Math.round(ms / 60000);
+}
+
+function formatHm(ms: number): string {
+  const m = minutes(ms);
+  return `${Math.floor(m / 60)}時間${String(m % 60).padStart(2, '0')}分`;
+}
 
 function fuelDescription(f: FuelStop): string {
   const parts: string[] = [];
@@ -57,6 +68,10 @@ export default function RideMap({ rideId, title, onClose }: Props) {
   const placedFuels = fuels.filter((f) => f.lat != null && f.lng != null);
   const totalLiters = fuels.reduce((s, f) => s + (f.liters ?? 0), 0);
   const totalYen = fuels.reduce((s, f) => s + (f.priceYen ?? 0), 0);
+  const allStops = points ? detectRests(points, fuels) : [];
+  const rests = allStops.filter((r) => !r.isFuel);
+  const restMs = rests.reduce((s, r) => s + r.durationMs, 0);
+  const moving = points ? movingMs(points, allStops) : 0;
 
   const fit = () => {
     const all = [...coords, ...placedFuels.map((f) => ({ latitude: f.lat!, longitude: f.lng! }))];
@@ -87,6 +102,15 @@ export default function RideMap({ rideId, title, onClose }: Props) {
               onPress={() => setSelectedFuelId(f.id)}
             />
           ))}
+          {rests.map((r) => (
+            <Marker
+              key={`rest-${r.startT}`}
+              coordinate={{ latitude: r.lat, longitude: r.lng }}
+              title={`休憩 ${hhmm(r.startT)}〜${hhmm(r.endT)}`}
+              description={`約${minutes(r.durationMs)}分`}
+              pinColor="blue"
+            />
+          ))}
         </MapView>
       )}
 
@@ -109,6 +133,10 @@ export default function RideMap({ rideId, title, onClose }: Props) {
           <Text style={styles.panelTitle}>{title}</Text>
           <Text style={styles.panelSub}>
             {points.length}点・直線つなぎの距離 {rawDistanceKm(points).toFixed(1)} km
+          </Text>
+          <Text style={styles.panelSub}>
+            走行 {formatHm(moving)}
+            {rests.length > 0 ? `・休憩 ${rests.length}回（計${minutes(restMs)}分）` : ''}
           </Text>
           {fuels.length > 0 ? (
             <Text style={styles.panelSub}>
