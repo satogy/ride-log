@@ -153,6 +153,10 @@ export default function App() {
       >
         <Text style={styles.bigButtonText}>出発</Text>
       </Pressable>
+      {/* 確認用：実際にインストールされたバンドルID（Sideloadlyで変わることがある） */}
+      <Text style={styles.footer}>
+        v{Application.nativeApplicationVersion} ・ {Application.applicationId}
+      </Text>
       <Text style={styles.sectionTitle}>これまでのライド</Text>
       <FlatList
         data={past}
@@ -170,10 +174,6 @@ export default function App() {
           </Pressable>
         )}
       />
-      {/* 地図が出ないときの確認用：実際にインストールされたバンドルID（Sideloadlyで変わることがある） */}
-      <Text style={styles.footer}>
-        v{Application.nativeApplicationVersion} ・ {Application.applicationId}
-      </Text>
     </SafeAreaView>
   );
 }
@@ -203,5 +203,5 @@ const styles = StyleSheet.create({
   row: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#ccc' },
   rowTitle: { fontSize: 16 },
   rowSub: { color: '#666', marginTop: 2 },
-  footer: { color: '#999', fontSize: 12, textAlign: 'center', marginTop: 8 },
+  footer: { color: '#999', fontSize: 12, textAlign: 'center', marginTop: -4 },
 });
